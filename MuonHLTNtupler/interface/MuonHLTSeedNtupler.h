@@ -608,7 +608,7 @@ private:
   public:
     virtual ~seedTemplate() {}
 
-    void clear() {
+    void clear_base() {
       mva0_ = -99999.;
       mva1_ = -99999.;
       mva2_ = -99999.;
@@ -678,7 +678,9 @@ private:
       return;
     }
 
-    void setBranch(TTree* tmpntpl) {
+    virtual void clear() { clear_base(); }
+
+    void setBranch_base(TTree* tmpntpl) {
       tmpntpl->Branch("mva0",          &mva0_, "mva0/F");
       tmpntpl->Branch("mva1",          &mva1_, "mva1/F");
       tmpntpl->Branch("mva2",          &mva2_, "mva2/F");
@@ -747,6 +749,8 @@ private:
 
       return;
     }
+
+    virtual void setBranch(TTree* tmpntpl) { setBranch_base(tmpntpl); }
 
     void fill(TrajectorySeed seed, edm::ESHandle<TrackerGeometry> tracker) {
       GlobalVector p = tracker->idToDet(seed.startingState().detId())->surface().toGlobal(seed.startingState().parameters().momentum());
@@ -893,6 +897,10 @@ private:
   void fill_seedTemplate(
   const edm::Event &, edm::EDGetTokenT<TrajectorySeedCollection>&, pairSeedMvaEstimator,
   edm::ESHandle<TrackerGeometry>&, std::map<tmpTSOD,unsigned int>&, trkTemplate*, TTree*, int &nSeed );
+
+  void fill_seedTemplate(
+  const edm::Event &, edm::EDGetTokenT<TrajectorySeedCollection>&,
+  edm::ESHandle<TrackerGeometry>&, std::map<tmpTSOD,unsigned int>&, trkTemplate*, TTree*, int &nSeed, edm::ESHandle<MagneticField> magfieldH, const edm::EventSetup &iSetup, GeometricSearchTracker* geomTracker );
 
   // HERE
 
