@@ -93,12 +93,26 @@
 
 #include "HLTrigger/MuonHLTSeedMVAClassifier/interface/SeedMvaEstimator.h"
 
+// -- for L1TkMu propagation
+#include "TrackingTools/GeomPropagators/interface/Propagator.h"
+#include "TrackingTools/Records/interface/TrackingComponentsRecord.h"
+#include "TrackingTools/TrajectoryState/interface/FreeTrajectoryState.h"
+#include "RecoTracker/TkDetLayers/interface/GeometricSearchTracker.h"
+#include "RecoTracker/TkDetLayers/interface/GeometricSearchTrackerBuilder.h"
+#include "Geometry/TrackerNumberingBuilder/interface/GeometricDet.h"
+#include "Geometry/Records/interface/IdealGeometryRecord.h"
+#include "DataFormats/TrackerCommon/interface/TrackerTopology.h"
+#include "Geometry/Records/interface/TrackerTopologyRcd.h"
+
 #include "TTree.h"
 #include "TString.h"
 
 using namespace std;
 using namespace reco;
 using namespace edm;
+
+typedef pair<const DetLayer*, TrajectoryStateOnSurface> LayerTSOS;
+typedef pair<const DetLayer*, const TrackingRecHit*> LayerHit;
 
 class MuonHLTSeedNtupler : public edm::EDAnalyzer
 {
@@ -126,6 +140,8 @@ private:
 
   edm::EDGetTokenT< reco::VertexCollection >                 t_offlineVertex_;
   edm::EDGetTokenT< std::vector<PileupSummaryInfo> >         t_PUSummaryInfo_;
+
+  edm::EDGetTokenT< std::vector< TTTrack< Ref_Phase2TrackerDigi_ > > > ttTrackToken_;
 
   edm::EDGetTokenT< l1t::MuonBxCollection >                  t_L1Muon_;
   edm::EDGetTokenT< reco::RecoChargedCandidateCollection >   t_L2Muon_;
@@ -249,13 +265,13 @@ private:
   // pairSeedMvaEstimator mvaHltIter3IterL3FromL1MuonPixelSeeds_;
 
   TTree *NTEvent_;
-  // TTree *NThltIterL3OI_;
-  // TTree *NThltIter0_;
-  // TTree *NThltIter2_;
-  // TTree *NThltIter3_;
-  // TTree *NThltIter0FromL1_;
+  TTree *NThltIterL3OI_;
+  TTree *NThltIter0_;
+  TTree *NThltIter2_;
+  TTree *NThltIter3_;
+  TTree *NThltIter0FromL1_;
   TTree *NThltIter2FromL1_;
-  // TTree *NThltIter3FromL1_;
+  TTree *NThltIter3FromL1_;
 
   int runNum_;       
   int lumiBlockNum_;
@@ -345,6 +361,13 @@ private:
     std::vector<int> bestMatchTP_numberOfTrackerLayers;
     std::vector<double> bestMatchTP_sharedFraction;
     std::vector<int> matchedTPsize;
+    std::vector<double> bestMatchTP_GenPt;
+    std::vector<double> bestMatchTP_GenEta;
+    std::vector<double> bestMatchTP_GenPhi;
+    std::vector<int> bestMatchTP_Gen_isPromptFinalState;
+    std::vector<int> bestMatchTP_Gen_isHardProcess;
+    std::vector<int> bestMatchTP_Gen_fromHardProcessFinalState;
+    std::vector<int> bestMatchTP_Gen_fromHardProcessDecayed;
   public:
     void clear() {
       nTrks = 0;
@@ -368,6 +391,13 @@ private:
       bestMatchTP_numberOfTrackerLayers.clear();
       bestMatchTP_sharedFraction.clear();
       matchedTPsize.clear();
+      bestMatchTP_GenPt.clear();
+      bestMatchTP_GenEta.clear();
+      bestMatchTP_GenPhi.clear();
+      bestMatchTP_Gen_isPromptFinalState.clear();
+      bestMatchTP_Gen_isHardProcess.clear();
+      bestMatchTP_Gen_fromHardProcessFinalState.clear();
+      bestMatchTP_Gen_fromHardProcessDecayed.clear();
 
       return;
     }
@@ -394,6 +424,13 @@ private:
       tmpntpl->Branch(name+"_bestMatchTP_numberOfTrackerLayers", &bestMatchTP_numberOfTrackerLayers);
       tmpntpl->Branch(name+"_bestMatchTP_sharedFraction", &bestMatchTP_sharedFraction);
       tmpntpl->Branch(name+"_matchedTPsize", &matchedTPsize);
+      tmpntpl->Branch(name+"_bestMatchTP_GenPt", &bestMatchTP_GenPt);
+      tmpntpl->Branch(name+"_bestMatchTP_GenEta", &bestMatchTP_GenEta);
+      tmpntpl->Branch(name+"_bestMatchTP_GenPhi", &bestMatchTP_GenPhi);
+      tmpntpl->Branch(name+"_bestMatchTP_Gen_isPromptFinalState", &bestMatchTP_Gen_isPromptFinalState);
+      tmpntpl->Branch(name+"_bestMatchTP_Gen_isHardProcess", &bestMatchTP_Gen_isHardProcess);
+      tmpntpl->Branch(name+"_bestMatchTP_Gen_fromHardProcessFinalState", &bestMatchTP_Gen_fromHardProcessFinalState);
+      tmpntpl->Branch(name+"_bestMatchTP_Gen_fromHardProcessDecayed", &bestMatchTP_Gen_fromHardProcessDecayed);
 
       return;
     }
@@ -423,6 +460,14 @@ private:
       bestMatchTP_numberOfTrackerHits.push_back(TP->numberOfTrackerHits());
       bestMatchTP_numberOfTrackerLayers.push_back(TP->numberOfTrackerLayers());
 
+      bestMatchTP_GenPt.push_back( TP->genParticles().empty() ? -99999. : (*(TP->genParticles())[0]).pt() );
+      bestMatchTP_GenEta.push_back( TP->genParticles().empty() ? -99999. : (*(TP->genParticles())[0]).eta() );
+      bestMatchTP_GenPhi.push_back( TP->genParticles().empty() ? -99999. : (*(TP->genParticles())[0]).phi() );
+      bestMatchTP_Gen_isPromptFinalState.push_back( TP->genParticles().empty() ? -99999 : (int)(*(TP->genParticles())[0]).isPromptFinalState() );
+      bestMatchTP_Gen_isHardProcess.push_back( TP->genParticles().empty() ? -99999 : (int)(*(TP->genParticles())[0]).isHardProcess() );
+      bestMatchTP_Gen_fromHardProcessFinalState.push_back( TP->genParticles().empty() ? -99999 : (int)(*(TP->genParticles())[0]).fromHardProcessFinalState() );
+      bestMatchTP_Gen_fromHardProcessDecayed.push_back( TP->genParticles().empty() ? -99999 : (int)(*(TP->genParticles())[0]).fromHardProcessDecayed() );
+
       return;
     }
 
@@ -440,6 +485,13 @@ private:
       bestMatchTP_numberOfHits.push_back(-99999);
       bestMatchTP_numberOfTrackerHits.push_back(-99999);
       bestMatchTP_numberOfTrackerLayers.push_back(-99999);
+      bestMatchTP_GenPt.push_back(-99999.);
+      bestMatchTP_GenEta.push_back(-99999.);
+      bestMatchTP_GenPhi.push_back(-99999.);
+      bestMatchTP_Gen_isPromptFinalState.push_back(-99999);
+      bestMatchTP_Gen_isHardProcess.push_back(-99999);
+      bestMatchTP_Gen_fromHardProcessFinalState.push_back(-99999);
+      bestMatchTP_Gen_fromHardProcessDecayed.push_back(-99999);
 
       return;
     }
@@ -451,6 +503,13 @@ private:
 
     int get_bestMatchTP_pdgId(int idx) { return bestMatchTP_pdgId.at(idx); }
     int get_matchedTPsize(int idx) { return matchedTPsize.at(idx); }
+    double get_bestMatchTP_GenPt(int idx) { return bestMatchTP_GenPt.at(idx); }
+    double get_bestMatchTP_GenEta(int idx) { return bestMatchTP_GenEta.at(idx); }
+    double get_bestMatchTP_GenPhi(int idx) { return bestMatchTP_GenPhi.at(idx); }
+    int get_bestMatchTP_Gen_isPromptFinalState(int idx) { return bestMatchTP_Gen_isPromptFinalState.at(idx); }
+    int get_bestMatchTP_Gen_isHardProcess(int idx) { return bestMatchTP_Gen_isHardProcess.at(idx); }
+    int get_bestMatchTP_Gen_fromHardProcessFinalState(int idx) { return bestMatchTP_Gen_fromHardProcessFinalState.at(idx); }
+    int get_bestMatchTP_Gen_fromHardProcessDecayed(int idx) { return bestMatchTP_Gen_fromHardProcessDecayed.at(idx); }
 
     void print() {
       std::cout << "\nnTrks: " << nTrks << std::endl;
@@ -539,7 +598,16 @@ private:
     float gen_pt_;
     float gen_eta_;
     float gen_phi_;
+    float bestMatchTP_GenPt_;
+    float bestMatchTP_GenEta_;
+    float bestMatchTP_GenPhi_;
+    int bestMatchTP_Gen_isPromptFinalState_;
+    int bestMatchTP_Gen_isHardProcess_;
+    int bestMatchTP_Gen_fromHardProcessFinalState_;
+    int bestMatchTP_Gen_fromHardProcessDecayed_;
   public:
+    virtual ~seedTemplate() {}
+
     void clear() {
       mva0_ = -99999.;
       mva1_ = -99999.;
@@ -599,6 +667,13 @@ private:
       gen_pt_ = -99999.;
       gen_eta_ = -99999.;
       gen_phi_ = -99999.;
+      bestMatchTP_GenPt_ = -99999.;
+      bestMatchTP_GenEta_ = -99999.;
+      bestMatchTP_GenPhi_ = -99999.;
+      bestMatchTP_Gen_isPromptFinalState_ = -99999;
+      bestMatchTP_Gen_isHardProcess_ = -99999;
+      bestMatchTP_Gen_fromHardProcessFinalState_ = -99999;
+      bestMatchTP_Gen_fromHardProcessDecayed_ = -99999;
 
       return;
     }
@@ -662,6 +737,13 @@ private:
       tmpntpl->Branch("gen_pt",      &gen_pt_, "gen_pt/F");
       tmpntpl->Branch("gen_eta",     &gen_eta_, "gen_eta/F");
       tmpntpl->Branch("gen_phi",     &gen_phi_, "gen_phi/F");
+      tmpntpl->Branch("bestMatchTP_GenPt", &bestMatchTP_GenPt_, "bestMatchTP_GenPt/F");
+      tmpntpl->Branch("bestMatchTP_GenEta", &bestMatchTP_GenEta_, "bestMatchTP_GenEta/F");
+      tmpntpl->Branch("bestMatchTP_GenPhi", &bestMatchTP_GenPhi_, "bestMatchTP_GenPhi/F");
+      tmpntpl->Branch("bestMatchTP_Gen_isPromptFinalState", &bestMatchTP_Gen_isPromptFinalState_, "bestMatchTP_Gen_isPromptFinalState/I");
+      tmpntpl->Branch("bestMatchTP_Gen_isHardProcess", &bestMatchTP_Gen_isHardProcess_, "bestMatchTP_Gen_isHardProcess/I");
+      tmpntpl->Branch("bestMatchTP_Gen_fromHardProcessFinalState", &bestMatchTP_Gen_fromHardProcessFinalState_, "bestMatchTP_Gen_fromHardProcessFinalState/I");
+      tmpntpl->Branch("bestMatchTP_Gen_fromHardProcessDecayed", &bestMatchTP_Gen_fromHardProcessDecayed_, "bestMatchTP_Gen_fromHardProcessDecayed/I");
 
       return;
     }
@@ -771,6 +853,13 @@ private:
 
       bestMatchTP_pdgId_ = TTtrack->get_bestMatchTP_pdgId(index);
       matchedTPsize_ = TTtrack->get_matchedTPsize(index);
+      bestMatchTP_GenPt_ = (float)TTtrack->get_bestMatchTP_GenPt(index);
+      bestMatchTP_GenEta_ = (float)TTtrack->get_bestMatchTP_GenEta(index);
+      bestMatchTP_GenPhi_ = (float)TTtrack->get_bestMatchTP_GenPhi(index);
+      bestMatchTP_Gen_isPromptFinalState_ = TTtrack->get_bestMatchTP_Gen_isPromptFinalState(index);
+      bestMatchTP_Gen_isHardProcess_ = TTtrack->get_bestMatchTP_Gen_isHardProcess(index);
+      bestMatchTP_Gen_fromHardProcessFinalState_ = TTtrack->get_bestMatchTP_Gen_fromHardProcessFinalState(index);
+      bestMatchTP_Gen_fromHardProcessDecayed_ = TTtrack->get_bestMatchTP_Gen_fromHardProcessDecayed(index);
     }
 
     void fill_ntuple( TTree* tmpntpl ) {
@@ -804,4 +893,190 @@ private:
   void fill_seedTemplate(
   const edm::Event &, edm::EDGetTokenT<TrajectorySeedCollection>&, pairSeedMvaEstimator,
   edm::ESHandle<TrackerGeometry>&, std::map<tmpTSOD,unsigned int>&, trkTemplate*, TTree*, int &nSeed );
+
+  // HERE
+
+  class seedL1TSOSTemplate : public seedTemplate {
+  private:
+    float l1x1_;
+    float l1y1_;
+    float l1z1_;
+    float l1x2_;
+    float l1y2_;
+    float l1z2_;
+    float hitx1_;
+    float hity1_;
+    float hitz1_;
+    float hitx2_;
+    float hity2_;
+    float hitz2_;
+    float l1x3_;
+    float l1y3_;
+    float l1z3_;
+    float hitx3_;
+    float hity3_;
+    float hitz3_;
+    float l1x4_;
+    float l1y4_;
+    float l1z4_;
+    float hitx4_;
+    float hity4_;
+    float hitz4_;
+    int nHits_;
+
+  public:
+    ~seedL1TSOSTemplate() {}
+
+    void clearL1Hit_12() {
+      l1x1_ = -99999.;
+      l1y1_ = -99999.;
+      l1z1_ = -99999.;
+      l1x2_ = -99999.;
+      l1y2_ = -99999.;
+      l1z2_ = -99999.;
+      hitx1_ = -99999.;
+      hity1_ = -99999.;
+      hitz1_ = -99999.;
+      hitx2_ = -99999.;
+      hity2_ = -99999.;
+      hitz2_ = -99999.;
+      nHits_ = -99999;
+    }
+
+    void clearL1Hit_3() {
+      l1x3_ = -99999.;
+      l1y3_ = -99999.;
+      l1z3_ = -99999.;
+      hitx3_ = -99999.;
+      hity3_ = -99999.;
+      hitz3_ = -99999.;
+    }
+
+    void clearL1Hit_4() {
+      l1x4_ = -99999.;
+      l1y4_ = -99999.;
+      l1z4_ = -99999.;
+      hitx4_ = -99999.;
+      hity4_ = -99999.;
+      hitz4_ = -99999.;
+    }
+
+    void clear() {
+      clear_base();
+      clearL1Hit_12();
+      clearL1Hit_3();
+      clearL1Hit_4();
+    }
+
+    void setBranch_12(TTree* tmpntpl) {
+      tmpntpl->Branch("l1x1", &l1x1_, "l1x1/F");
+      tmpntpl->Branch("l1y1", &l1y1_, "l1y1/F");
+      tmpntpl->Branch("l1z1", &l1z1_, "l1z1/F");
+      tmpntpl->Branch("hitx1", &hitx1_, "hitx1/F");
+      tmpntpl->Branch("hity1", &hity1_, "hity1/F");
+      tmpntpl->Branch("hitz1", &hitz1_, "hitz1/F");
+      tmpntpl->Branch("l1x2", &l1x2_, "l1x2/F");
+      tmpntpl->Branch("l1y2", &l1y2_, "l1y2/F");
+      tmpntpl->Branch("l1z2", &l1z2_, "l1z2/F");
+      tmpntpl->Branch("hitx2", &hitx2_, "hitx2/F");
+      tmpntpl->Branch("hity2", &hity2_, "hity2/F");
+      tmpntpl->Branch("hitz2", &hitz2_, "hitz2/F");
+      tmpntpl->Branch("nHits", &nHits_, "nHits/I");
+    }
+
+    void setBranch_3(TTree* tmpntpl) {
+      tmpntpl->Branch("l1x3", &l1x3_, "l1x3/F");
+      tmpntpl->Branch("l1y3", &l1y3_, "l1y3/F");
+      tmpntpl->Branch("l1z3", &l1z3_, "l1z3/F");
+      tmpntpl->Branch("hitx3", &hitx3_, "hitx3/F");
+      tmpntpl->Branch("hity3", &hity3_, "hity3/F");
+      tmpntpl->Branch("hitz3", &hitz3_, "hitz3/F");
+    }
+
+    void setBranch_4(TTree* tmpntpl) {
+      tmpntpl->Branch("l1x4", &l1x4_, "l1x4/F");
+      tmpntpl->Branch("l1y4", &l1y4_, "l1y4/F");
+      tmpntpl->Branch("l1z4", &l1z4_, "l1z4/F");
+      tmpntpl->Branch("hitx4", &hitx4_, "hitx4/F");
+      tmpntpl->Branch("hity4", &hity4_, "hity4/F");
+      tmpntpl->Branch("hitz4", &hitz4_, "hitz4/F");
+    }
+
+    void setBranch(TTree* tmpntpl) {
+      setBranch_base(tmpntpl);
+      setBranch_12(tmpntpl);
+      setBranch_3(tmpntpl);
+      setBranch_4(tmpntpl);
+    }
+
+    void fill_12(pair<LayerHit, LayerTSOS> firstHit, pair<LayerHit, LayerTSOS> secondHit, int nHits) {
+      auto hit1   = firstHit.first.second;
+      auto tsos1  = firstHit.second.second;
+
+      l1x1_ = tsos1.globalPosition().x();
+      l1y1_ = tsos1.globalPosition().y();
+      l1z1_ = tsos1.globalPosition().z();
+      hitx1_ = hit1->globalPosition().x();
+      hity1_ = hit1->globalPosition().y();
+      hitz1_ = hit1->globalPosition().z();
+
+      auto hit2   = secondHit.first.second;
+      auto tsos2  = secondHit.second.second;
+
+      l1x2_ = tsos2.globalPosition().x();
+      l1y2_ = tsos2.globalPosition().y();
+      l1z2_ = tsos2.globalPosition().z();
+      hitx2_ = hit2->globalPosition().x();
+      hity2_ = hit2->globalPosition().y();
+      hitz2_ = hit2->globalPosition().z();
+
+      nHits_ = nHits;
+    }
+
+    void fill_3(pair<LayerHit, LayerTSOS> thirdHit) {
+      auto hit3   = thirdHit.first.second;
+      auto tsos3  = thirdHit.second.second;
+
+      l1x3_ = tsos3.globalPosition().x();
+      l1y3_ = tsos3.globalPosition().y();
+      l1z3_ = tsos3.globalPosition().z();
+      hitx3_ = hit3->globalPosition().x();
+      hity3_ = hit3->globalPosition().y();
+      hitz3_ = hit3->globalPosition().z();
+    }
+
+    void fill_4(pair<LayerHit, LayerTSOS> fourthHit) {
+      auto hit4   = fourthHit.first.second;
+      auto tsos4  = fourthHit.second.second;
+
+      l1x4_ = tsos4.globalPosition().x();
+      l1y4_ = tsos4.globalPosition().y();
+      l1z4_ = tsos4.globalPosition().z();
+      hitx4_ = hit4->globalPosition().x();
+      hity4_ = hit4->globalPosition().y();
+      hitz4_ = hit4->globalPosition().z();
+    }
+  };
+
+  seedL1TSOSTemplate* theSeeds;
+
+  void testRun(
+    const edm::Event &, const edm::EventSetup&,
+    edm::EDGetTokenT<TrajectorySeedCollection>&
+  );
+
+  vector< LayerTSOS > getTsosOnPixels(
+    TTTrack<Ref_Phase2TrackerDigi_>,
+    edm::ESHandle<MagneticField>&,
+    const Propagator&,
+    GeometricSearchTracker*
+  );
+
+  vector< pair<LayerHit, LayerTSOS> > getHitTsosPairs(
+    TrajectorySeed,
+    edm::Handle< std::vector< TTTrack< Ref_Phase2TrackerDigi_ > > >,
+    edm::ESHandle<MagneticField>&,
+    const Propagator&,
+    GeometricSearchTracker*
+  );
 };
