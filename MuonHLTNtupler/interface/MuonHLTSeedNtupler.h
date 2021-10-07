@@ -1082,7 +1082,8 @@ private:
 
   vector< pair<LayerHit, LayerTSOS> > getHitTsosPairs(
     TrajectorySeed,
-    edm::Handle< std::vector< TTTrack< Ref_Phase2TrackerDigi_ > > >,
+    //edm::Handle< std::vector< TTTrack< Ref_Phase2TrackerDigi_ > > >,
+    edm::Handle<l1t::TkMuonCollection>,
     edm::ESHandle<MagneticField>&,
     const Propagator&,
     GeometricSearchTracker*
