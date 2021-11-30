@@ -1036,7 +1036,7 @@ vector< pair<LayerHit, LayerTSOS> > MuonHLTSeedNtupler::getHitTsosPairs(
   for(auto L1TkMu=L1TkMuonHandle->begin(); L1TkMu!=L1TkMuonHandle->end(); ++L1TkMu) {
 
     vector< LayerTSOS > v_tsos = getTsosOnPixels(
-      L1TkMu->trkPtr(),
+      *L1TkMu->trkPtr(),
       magfieldH,
       propagatorAlong,
       geomTracker
