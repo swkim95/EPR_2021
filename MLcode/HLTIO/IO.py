@@ -41,7 +41,6 @@ def readSeedTree(path,treePath, minpt = 0, maxpt = 1e9, eta_bound = 0.9, isGNN =
 
     df = df[ df['gen_pt'] < maxpt ]
     df = df[ df['gen_pt'] > minpt ]
-    df.loc[:,'hasL2'] = df.apply(preprocess.hasL2, axis=1)
     df = preprocess.addDistHitL1Tk(df, addAbsDist=False)
     df = preprocess.setClassLabel(df)
 

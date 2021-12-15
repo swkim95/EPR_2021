@@ -186,11 +186,6 @@ def filterClass(df, isGNN = False):
 
     return df
 
-def hasL2(row):
-    if row['dR_minDRL2SeedP'] < 0.:
-        return 0
-    return 1
-
 def addDistHitL1Tk(df, addAbsDist = True):
     for i in range(1,5):
         exprd2 = f'''d2hitl1tk{i} = ((l1x{i}-hitx{i})**2 +\
